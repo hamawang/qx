@@ -1,0 +1,132 @@
+/* QxAI transcript layout refinements shared by the real workbench and browser fixture. */
+
+.qx-ai-scroll-to-latest.qx-shadcn-button {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  z-index: 8;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--qx-border-1);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qx-bg-component-2) 90%, transparent);
+  color: var(--qx-text-secondary);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--qx-shadow) 8%, transparent),
+    0 5px 16px color-mix(in srgb, var(--qx-shadow) 14%, transparent);
+  transform: translateX(-50%);
+  pointer-events: auto;
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+  backdrop-filter: blur(10px) saturate(125%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .qx-ai-scroll-to-latest.qx-shadcn-button:hover {
+    border-color: var(--qx-border-2);
+    background: var(--qx-bg-component-3);
+    color: var(--qx-text-primary);
+  }
+}
+
+.qx-ai-scroll-to-latest.qx-shadcn-button:active {
+  transform: translateX(-50%) translateY(1px);
+}
+
+.qx-ai-message-list.is-jan[data-following="false"] {
+  scroll-behavior: auto;
+}
+
+.qx-ai-message-list-end {
+  width: 100%;
+  height: 1px;
+  flex: 0 0 1px;
+}
+
+.qx-jan-tool-section,
+.qx-jan-tool-section pre {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.qx-jan-tool-label {
+  max-width: min(42%, 240px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keep the transcript and composer on the same visual axis as the pane narrows. */
+@container qx-content (max-width: 760px) {
+  .qx-ai-message-list.is-jan {
+    padding: 12px 14px 10px;
+  }
+
+  .qx-ai-conversation.is-jan .qx-ai-prompt-dock.is-docked-flow {
+    padding: 6px 14px 9px;
+  }
+
+  .qx-ai-message-column {
+    gap: 14px;
+  }
+}
+
+@container qx-content (max-width: 520px) {
+  .qx-ai-message-list.is-jan {
+    padding: 10px 10px 8px;
+  }
+
+  .qx-ai-conversation.is-jan .qx-ai-prompt-dock.is-docked-flow {
+    gap: 6px;
+    padding: 5px 10px 8px;
+  }
+
+  .qx-ai-message-column {
+    gap: 12px;
+  }
+
+  .qx-jan-cot-header,
+  .qx-jan-tool-header,
+  .qx-ai-tool-group-header {
+    gap: 6px;
+    padding-inline: 7px;
+  }
+
+  .qx-jan-composer-speed {
+    display: none;
+  }
+
+  .qx-jan-composer-usage {
+    max-width: 104px;
+  }
+}
+
+@container qx-content (max-width: 360px) {
+  .qx-ai-message-list.is-jan {
+    padding-inline: 8px;
+  }
+
+  .qx-ai-conversation.is-jan .qx-ai-prompt-dock.is-docked-flow {
+    padding-inline: 8px;
+  }
+
+  .qx-ai-reasoning-summary,
+  .qx-ai-tool-activity,
+  .qx-ai-activity-separator {
+    display: none;
+  }
+
+  .qx-jan-tool-label {
+    max-width: calc(100% - 58px);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .qx-ai-scroll-to-latest.qx-shadcn-button {
+    background: var(--qx-bg-component-2);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

@@ -30,7 +30,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Select,
   Toggle,
 } from "../../components/ui";
 import { requestPanelKeyWindow } from "../../hooks/usePanelKeyWindow";
@@ -44,9 +43,14 @@ import { useQxModuleShell } from "../../hooks/useQxModuleShell";
 import { useT } from "../../i18n";
 import { useStore } from "../../store";
 import { useSettingsStore } from "../settings/store";
-import { buildModelSelectOptions, openAgentSettingsTab } from "./AiProviderConfig";
+import { openAgentSettingsTab } from "./AiProviderConfig";
 import { AiMessageContent } from "./message-rendering";
+import {
+  QxAiScrollToLatestButton,
+  useQxAiConversationScroll,
+} from "./conversation-scroll";
 import { MemoryScopeControl, MemoryScopeDialog } from "./MemoryScopeControl";
+import { QxAiModelSwitcher } from "./QxAiModelSwitcher";
 import { QxAiMessageActions } from "./message-actions";
 import { QxAiTokenCounter } from "./token-counter";
 import QxAiConversationList from "./QxAiConversationList";
@@ -112,9 +116,7 @@ export default function QxAiChat() {
   const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
   const [editingMessageDraft, setEditingMessageDraft] = useState("");
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const scrollFrameRef = useRef<number | undefined>(undefined);
   const listRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const agentSettings = useSettingsStore((state) => state.settings.agent);
@@ -170,6 +172,25 @@ export default function QxAiChat() {
   const streamedContent = run?.streamedContent ?? "";
   const streamedReasoning = run?.streamedReasoning ?? "";
   const streamingSteps = run?.streamingSteps ?? [];
+  const messages = useMemo(
+    () => conv?.messages.filter((message) => message.role !== "system") ?? [],
+    [conv?.messages],
+  );
+  const latestMessage = messages[messages.length - 1];
+  const latestStreamingStep = streamingSteps[streamingSteps.length - 1];
+  const conversationScroll = useQxAiConversationScroll({
+    conversationId: conv?.id,
+    revision: [
+      messages.length,
+      latestMessage?.content.length ?? 0,
+      streamedContent.length,
+      streamedReasoning.length,
+      streamingSteps.length,
+      latestStreamingStep?.input?.length ?? 0,
+      latestStreamingStep?.output?.length ?? latestStreamingStep?.text?.length ?? 0,
+      latestStreamingStep?.state ?? "idle",
+    ].join(":"),
+  });
   const currentError = run?.error ?? error;
   const errorPresentation = currentError ? presentQxAiError(currentError) : null;
   const currentErrorText = errorPresentation?.kind === "missing-api-key"
@@ -269,13 +290,25 @@ export default function QxAiChat() {
     if (composerRef.current) {
       composerRef.current.style.height = "auto";
     }
+    if (!isCurrentConversationStreaming) {
+      conversationScroll.scrollToLatest();
+    }
     void sendMessage(
       trimmed || t("qxai.attachments.review", "Please review the attached files."),
       selectedSkill ?? undefined,
       undefined,
       pendingAttachments,
     );
-  }, [canChat, input, pendingAttachments, selectedSkill, sendMessage, t]);
+  }, [
+    canChat,
+    conversationScroll.scrollToLatest,
+    input,
+    isCurrentConversationStreaming,
+    pendingAttachments,
+    selectedSkill,
+    sendMessage,
+    t,
+  ]);
 
   const beginEditMessage = useCallback((messageIndex: number, content: string) => {
     setEditingMessageIndex(messageIndex);
@@ -394,25 +427,6 @@ export default function QxAiChat() {
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 28), 160)}px`;
   }, [input]);
-
-  useEffect(() => {
-    if (scrollFrameRef.current !== undefined) {
-      cancelAnimationFrame(scrollFrameRef.current);
-    }
-    scrollFrameRef.current = requestAnimationFrame(() => {
-      scrollFrameRef.current = undefined;
-      // Streaming can publish many deltas per second. Smooth-scroll queues a
-      // new animation for every delta and can lock the WebView; one coalesced
-      // native-positioned scroll keeps the transcript responsive.
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-    });
-    return () => {
-      if (scrollFrameRef.current !== undefined) {
-        cancelAnimationFrame(scrollFrameRef.current);
-        scrollFrameRef.current = undefined;
-      }
-    };
-  }, [conv?.id, conv?.messages.length, streamedContent, streamedReasoning, streamingSteps.length]);
 
   useEffect(() => {
     if (providers.length === 0) {
@@ -652,11 +666,6 @@ export default function QxAiChat() {
     island,
   });
 
-  const messages = useMemo(
-    () => conv?.messages.filter((m) => m.role !== "system") ?? [],
-    [conv?.messages],
-  );
-
   const primaryActionId =
     canChat && (input.trim() || pendingAttachments.length > 0) ? "send" : "new-chat";
 
@@ -695,70 +704,6 @@ export default function QxAiChat() {
           })}
         >
           {conv && <MemoryScopeControl key={conv.id} conversationId={conv.id} scope={conv.memoryScope} />}
-          <div className="qx-action-title">{t("qxai.model", "Model")}</div>
-          {providers.length > 0 && conv ? (
-            <>
-              <Select
-                value={conv.provider}
-                options={providers.map((provider) => ({
-                  value: provider.id,
-                  label: provider.name,
-                }))}
-                onChange={(provider) => {
-                  const nextProvider = providers.find((p) => p.id === provider);
-                  setConversationModel(
-                    conv.id,
-                    provider,
-                    nextProvider?.models[0]?.id ?? "",
-                  );
-                }}
-                ariaLabel={t("qxai.provider", "AI Provider")}
-                className="qx-inline-select"
-              />
-              {activeModels.length > 0 || conv.model ? (
-                <Select
-                  value={conv.model}
-                  options={buildModelSelectOptions({
-                    providerId: conv.provider,
-                    models: activeModels,
-                    favorites: agentSettings.favorite_models,
-                    capabilities: agentSettings.model_capabilities,
-                    extraModelId: conv.model,
-                    visionBadge: t("agent.model.vision.badge", "Vision"),
-                    reasoningBadge: t("agent.model.reasoning.badge", "Reasoning"),
-                  })}
-                  onChange={(model) => setConversationModel(conv.id, conv.provider, model)}
-                  ariaLabel={t("qxai.model", "Model")}
-                  className="qx-inline-select"
-                />
-              ) : (
-                <div className="qx-ai-tool-hint">
-                  {t("qxai.noModels", "No models available for this provider")}
-                </div>
-              )}
-              <div className={`qx-ai-capability-pill${modelVisionState !== "unsupported" ? " is-on" : ""}`}>
-                {modelVisionState === "supported"
-                  ? t("qxai.model.vision.on", "Vision enabled — images can be sent")
-                  : modelVisionState === "unknown"
-                    ? t(
-                        "qxai.model.vision.auto",
-                        "Vision auto-detect — an image request will verify support",
-                      )
-                    : t(
-                      "qxai.model.vision.off",
-                      "Text only — switch to a vision model or enable Vision in Settings → AI Agent",
-                    )}
-              </div>
-            </>
-          ) : (
-            <div className="qx-ai-tool-hint">
-              {t(
-                "qxai.configureProviders",
-                "Configure providers in Settings → AI Agent, or open Chat Settings for defaults.",
-              )}
-            </div>
-          )}
-
           <div className="qx-action-title">{t("qxai.reasoning", "Reasoning")}</div>
           <div className="qx-ai-reasoning-setting">
             <div>
@@ -893,8 +838,15 @@ export default function QxAiChat() {
             })}
           >
             <div className="qx-ai-conversation is-jan" data-qx-ai="conversation">
-              <div className="qx-ai-message-list is-jan" data-qx-region-scroll data-qx-ai="conversation-content">
-                <div className="qx-ai-message-column">
+              <div
+                ref={conversationScroll.viewportRef}
+                className="qx-ai-message-list is-jan"
+                data-qx-region-scroll
+                data-qx-ai="conversation-content"
+                data-following={conversationScroll.showJumpToLatest ? "false" : "true"}
+                onScroll={conversationScroll.onScroll}
+              >
+                <div ref={conversationScroll.contentRef} className="qx-ai-message-column">
                   {messages.map((msg) => {
                     const messageIndex = conv?.messages.indexOf(msg) ?? -1;
                     const isEditing = editingMessageIndex === messageIndex;
@@ -1074,12 +1026,17 @@ export default function QxAiChat() {
                     </div>
                   ) : null}
 
-                  <div ref={messagesEndRef} className="qx-ai-message-list-end" />
+                  <div className="qx-ai-message-list-end" />
                 </div>
               </div>
 
               {/* PromptInput dock — Elements structure, BUI field chrome (in-flow). */}
               <div className="qx-ai-prompt-dock qx-jan-composer-dock is-docked-flow" data-qx-ai="prompt-dock">
+                <QxAiScrollToLatestButton
+                  visible={conversationScroll.showJumpToLatest}
+                  label={t("qxai.scrollToLatest", "Jump to latest")}
+                  onClick={conversationScroll.scrollToLatest}
+                />
                 {skillPickerOpen ? (
                   <div
                     className="qx-ai-skill-picker is-docked is-vbg"
@@ -1378,6 +1335,21 @@ export default function QxAiChat() {
                       >
                         <Paperclip size={16} className={attachmentsBusy ? "qx-spin" : undefined} />
                       </Button>
+                      {conv ? (
+                        <QxAiModelSwitcher
+                          providers={providers}
+                          providerId={conv.provider}
+                          modelId={conv.model}
+                          favorites={agentSettings.favorite_models}
+                          capabilities={agentSettings.model_capabilities}
+                          disabled={isCurrentConversationStreaming}
+                          composerRef={composerRef}
+                          onChange={(providerId, modelId) =>
+                            setConversationModel(conv.id, providerId, modelId)
+                          }
+                          onManageModels={openAgentSettingsTab}
+                        />
+                      ) : null}
                     </div>
                     <div className="qx-jan-composer-actions">
                       <div className="qx-jan-composer-meta">

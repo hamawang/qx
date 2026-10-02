@@ -28,7 +28,8 @@
 }
 
 .qx-ai-conversation-list {
-  border-right: 1px solid var(--qx-border-1);
+  /* The shared split handle owns the divider; avoid a doubled separator. */
+  border-right: 0;
   background: color-mix(in srgb, var(--qx-bg-component-1) 72%, transparent);
   min-width: 0;
   overflow-x: hidden;
@@ -413,23 +414,6 @@
   border-radius: 6px;
   object-fit: cover;
   background: var(--qx-bg-component-3);
-}
-
-.qx-ai-capability-pill {
-  margin-top: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--qx-border-2) 70%, transparent);
-  background: color-mix(in srgb, var(--qx-bg-component-2) 88%, transparent);
-  color: var(--qx-text-tertiary);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.qx-ai-capability-pill.is-on {
-  border-color: color-mix(in srgb, var(--qx-accent) 40%, var(--qx-border-1));
-  background: color-mix(in srgb, var(--qx-accent) 12%, var(--qx-bg-component-2));
-  color: var(--qx-accent);
 }
 
 .qx-ai-pending-attachment > span {
@@ -1202,7 +1186,9 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overflow-anchor: none;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 14px 16px 12px;
   box-sizing: border-box;
 }
@@ -1213,7 +1199,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   min-height: min(100%, 200px);
   min-width: 0;
   padding-bottom: 4px;
@@ -1243,7 +1229,7 @@
 /* Non-first user turns get more breathing room (Jan mt-8 rhythm). */
 .qx-ai-message-column > .qx-ai-message.is-jan.is-user + .qx-ai-message.is-jan.is-user,
 .qx-ai-message-column > .qx-ai-message.is-jan.is-assistant + .qx-ai-message.is-jan.is-user {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 /* Jan assistant: full column, no heavy card shell */
@@ -1492,7 +1478,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 10px;
+  padding: 6px 16px 10px;
   box-sizing: border-box;
   background: linear-gradient(
     180deg,
@@ -1503,9 +1489,8 @@
   pointer-events: none;
 }
 
-.qx-ai-conversation.is-jan .qx-jan-composer-dock.is-docked-flow,
-.qx-ai-conversation.is-jan .qx-ai-prompt-dock.is-docked-flow > * {
-  width: min(720px, 100%);
+.qx-ai-conversation.is-jan .qx-ai-prompt-dock.is-docked-flow > :not(.qx-ai-scroll-to-latest) {
+  width: min(760px, 100%);
   pointer-events: auto;
 }
 
@@ -2162,18 +2147,13 @@
 }
 
 .qx-jan-tool-body {
-  margin-left: 2px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--qx-border-1);
-  background: color-mix(in srgb, var(--qx-bg-component-2) 88%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--qx-border-1) 50%, transparent);
-}
-
-.qx-jan-tool-body {
-  margin-left: 6px;
-  padding-left: 12px;
-  border-left: 2px dotted color-mix(in srgb, var(--qx-border-2) 80%, transparent);
+  margin: 0 4px 2px 7px;
+  padding: 6px 0 2px 12px;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--qx-border-2) 82%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 8px;

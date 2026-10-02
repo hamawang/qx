@@ -55,6 +55,8 @@
 @import "./styles/file-actions.css";
 @import "./styles/weather.css";
 @import "./styles/qx-ai.css";
+@import "./styles/qx-ai-layout.css";
+@import "./styles/qx-ai-model-switcher.css";
 @import "./styles/p-zai.css";
 @import "./styles/documents.css";
 @import "@xterm/xterm/css/xterm.css";

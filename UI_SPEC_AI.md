@@ -1,9 +1,9 @@
 # QxAI Chat UI Spec
 
-> 状态：Current · 适用版本：v0.6.83+ · Owner：Frontend · 最后复核：2026-08-31
+> 状态：Current · 适用版本：v0.6.83+ · Owner：Frontend · 最后复核：2026-10-02
 > **结构标杆**：[AI Elements](https://elements.ai-sdk.dev/)（Conversation / Message / Reasoning / Tool / PromptInput / Queue）  
 > **视觉标杆**：[Beautiful UI](https://www.beautifului.dev/)（field 气泡、Thinking 时间线、stream caret、ink 发送方钮）  
-> 实现落点：`src/modules/qx-ai/**`、`src/styles/qx-ai.css`  
+> 实现落点：`src/modules/qx-ai/**`、`src/styles/qx-ai.css`、`src/styles/qx-ai-layout.css`、`src/styles/qx-ai-model-switcher.css`
 > 与壳层关系：只约束 **对话工作台内容**；主壳仍以 [`UI_SPEC.md`](./UI_SPEC.md) 为准。
 
 ## 0. 原则（必须）
@@ -30,7 +30,7 @@
 | Message | 用户 field 胶囊 / 助手裸文 | `.qx-ai-message` + `.qx-ai-message-bubble` |
 | Reasoning | Thinking 触发条 + 时间线 | `.qx-ai-reasoning`（兼容 `.qx-jan-cot`） |
 | Tool | 紧凑 chip → 展开卡片 | `.qx-ai-tool`（兼容 `.qx-jan-tool`） |
-| PromptInput | field 底 + 方发送钮 | `.qx-ai-prompt` / `.qx-jan-composer` |
+| PromptInput | field 底 + 模型快捷切换 + 方发送钮 | `.qx-ai-prompt` / `.qx-jan-composer` |
 | Queue | 输入上方 chips | `.qx-ai-message-queue` |
 | — | stream caret | `.qx-stream-caret` |
 
@@ -61,7 +61,7 @@ QxShell (qx-qxai-chat-shell qx-content-shell is-workbench)
                       ├─ .qx-ai-message-list (scroll)
                       │    └─ .qx-ai-message-column  (min(760px, 100%))
                       └─ .qx-ai-prompt-dock.is-docked-flow  (in-flow，禁止 absolute 盖消息)
-  Context: 模型 / Reasoning / Tools / Actions
+  Context: Reasoning / Tools / Actions
   Bottom: 主操作 | New | … | Esc
 ```
 
@@ -73,6 +73,8 @@ QxShell (qx-qxai-chat-shell qx-content-shell is-workbench)
 4. 消息列 `min(760px, 100%)` 居中。
 5. 左列表默认 ~280px（持久化 `qx-ai.workbench.listWidth`），min ≥ 220；标题单行 ellipsis。
 6. 发送、附件、模型能力、API key 与工具运行错误统一进入 Bottom Island `error` 状态；Composer、消息正文和工具收起行下方不得临时增长错误行。工具历史中的失败详情只在用户主动展开该步骤后显示。
+7. Transcript 与 Composer 使用同一条 `min(760px, 100%)` 内容轴和相同水平 inset；分栏拖动、原生滚动条出现和 760px 以下单栏切换不得造成横向跳动。
+8. 实时输出只在用户已停留底部时跟随。用户向上滚动后必须保持当前阅读位置，在 Composer 上方显示不占布局高度的“回到最新消息”按钮；点击后立即贴底并恢复跟随。切换会话时按会话恢复本次进程内的阅读位置，不得让其它会话的流式增量抢滚动。
 
 ### Esc
 
@@ -146,8 +148,9 @@ QxShell (qx-qxai-chat-shell qx-content-shell is-workbench)
 1. 容器：~12px 圆角、field 底、hairline 边 + 轻阴影；focus 时 border 略加深（非重彩色光晕）。
 2. 文本：13px / 1.4，placeholder tertiary。
 3. 发送：**28×28** 方角钮；就绪 = `text-primary` 底 + 上箭头；禁用 = 中性灰底；排队中 = accent + ListPlus。
-4. 附件按钮 ghost icon；队列在 composer **上方**。
-5. token 占用与发送按钮组成右侧紧凑动作簇，垂直居中；不得让 token 按钮占据整条弹性中栏或漂在发送按钮上方。
+4. 左侧动作簇为附件 + 模型切换器；队列在 composer **上方**。模型触发器始终保留图标、浅底、圆角和下拉箭头，宽度不足时先隐藏供应商名，再截断模型名，不得把入口移出窄窗。
+5. 模型弹层按供应商分组，常用模型优先；能力与上下文标签只在模型行显示一次。长目录提供搜索、方向键循环、当前项勾选和“管理模型”入口；切换仅影响当前会话后续 turn，流式生成期间锁定。
+6. token 占用与发送按钮组成右侧紧凑动作簇，垂直居中；不得让 token 按钮占据整条弹性中栏或漂在发送按钮上方。
 
 ---
 
@@ -201,6 +204,8 @@ QxShell (qx-qxai-chat-shell qx-content-shell is-workbench)
 - [x] 代码块可复制、切换长行换行并在最大高度内独立滚动
 - [x] 已发送附件使用紧凑文件条/小缩略图，动作按 hover/focus 显示
 - [x] 队列在输入上，点击回填或直接编辑
+- [x] 模型切换器在宽/窄窗均可达，供应商分组、能力标签、搜索和焦点恢复完整
+- [x] Transcript / Composer 共轴；离底阅读不被流式输出抢走，回到底部后恢复跟随
 - [x] 亮色 / 暗色均正常，无死黑块
 - [x] Esc / Bottom Bar 符合 UI_SPEC
 

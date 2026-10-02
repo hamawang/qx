@@ -1,7 +1,12 @@
 // Production QxAI renderer with synthetic steps; no user session or provider traffic.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AgentStepsView } from "../../src/modules/qx-ai/message-rendering";
+import { QxAiModelSwitcher } from "../../src/modules/qx-ai/QxAiModelSwitcher";
+import {
+  QxAiScrollToLatestButton,
+  useQxAiConversationScroll,
+} from "../../src/modules/qx-ai/conversation-scroll";
 import type { AgentStep } from "../../src/modules/qx-ai/contracts";
 import { useSettingsStore } from "../../src/modules/settings/store";
 import "../../src/App.css";
@@ -62,7 +67,39 @@ const groupSteps: AgentStep[] = [
   },
 ];
 
+const modelProviders = [
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    models: [
+      { id: "gpt-4.1", name: "GPT-4.1", vision: true, vision_known: true, context_length: 128_000 },
+      { id: "claude-sonnet", name: "Claude Sonnet", reasoning: true, context_length: 200_000 },
+      { id: "gemini-pro", name: "Gemini Pro", vision: true, vision_known: true },
+      { id: "qwen-max", name: "Qwen Max" },
+      { id: "mistral-large", name: "Mistral Large" },
+    ],
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    models: [
+      { id: "deepseek-chat", name: "DeepSeek Chat", context_length: 64_000 },
+      { id: "deepseek-reasoner", name: "DeepSeek Reasoner", reasoning: true, context_length: 64_000 },
+      { id: "deepseek-vl", name: "DeepSeek VL", vision: true, vision_known: true },
+    ],
+  },
+];
+
 function Fixture() {
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const [modelSelection, setModelSelection] = useState({
+    providerId: "openrouter",
+    modelId: "gpt-4.1",
+  });
+  const [transcriptConversation, setTranscriptConversation] = useState("a");
+  const [transcriptRows, setTranscriptRows] = useState(() =>
+    Array.from({ length: 12 }, (_, index) => `Message ${index + 1}`),
+  );
   const [liveSteps, setLiveSteps] = useState<AgentStep[]>([
     {
       id: `live-${runKey}`,
@@ -72,9 +109,19 @@ function Fixture() {
       state: "running",
     },
   ]);
+  const transcriptScroll = useQxAiConversationScroll({
+    conversationId: `fixture-${runKey}-${transcriptConversation}`,
+    revision: transcriptRows.join("\0"),
+  });
 
   Object.assign(window, {
     qxAiDisclosureFixture: {
+      appendTranscript() {
+        setTranscriptRows((rows) => [...rows, `Message ${rows.length + 1}`]);
+      },
+      switchTranscriptConversation(id: string) {
+        setTranscriptConversation(id);
+      },
       completeLive() {
         setLiveSteps((steps) => steps.map((step) => ({
           ...step,
@@ -90,6 +137,81 @@ function Fixture() {
       className="qx-ai-disclosure-fixture"
       style={{ display: "grid", gap: 18, margin: "0 auto", maxWidth: 680, padding: 20 }}
     >
+      <section
+        className="qx-shell-content"
+        data-fixture="layout"
+        data-conversation={transcriptConversation}
+        style={{ display: "flex", height: 360, minHeight: 0, overflow: "hidden" }}
+      >
+        <div className="qx-ai-conversation is-jan" data-qx-ai="conversation">
+          <div
+            ref={transcriptScroll.viewportRef}
+            className="qx-ai-message-list is-jan"
+            data-qx-ai="conversation-content"
+            data-following={transcriptScroll.showJumpToLatest ? "false" : "true"}
+            onScroll={transcriptScroll.onScroll}
+          >
+            <div ref={transcriptScroll.contentRef} className="qx-ai-message-column">
+              {transcriptRows.map((row, index) => (
+                <div
+                  key={row}
+                  className={`qx-ai-message is-jan is-${index % 2 === 0 ? "user" : "assistant"}`}
+                >
+                  <div className="qx-ai-message-body">
+                    <div className="qx-ai-message-meta">
+                      {index % 2 === 0 ? "You" : "QxAI"}
+                    </div>
+                    <div
+                      className={`qx-ai-message-bubble is-jan is-${index % 2 === 0 ? "user" : "assistant"}`}
+                    >
+                      {row} · This line verifies stable transcript width and reading rhythm.
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className="qx-ai-message-list-end" />
+            </div>
+          </div>
+          <div className="qx-ai-prompt-dock qx-jan-composer-dock is-docked-flow">
+            <QxAiScrollToLatestButton
+              visible={transcriptScroll.showJumpToLatest}
+              label={locale === "zh-CN" ? "回到最新消息" : "Jump to latest"}
+              onClick={transcriptScroll.scrollToLatest}
+            />
+            <div className="qx-ai-prompt qx-jan-composer">
+              <textarea
+                ref={composerRef}
+                className="qx-jan-composer-input"
+                data-fixture="composer-input"
+                rows={1}
+                readOnly
+                placeholder={locale === "zh-CN" ? "输入消息…" : "Type a message…"}
+              />
+              <div className="qx-jan-composer-toolbar">
+                <div className="qx-jan-composer-tools">
+                  <QxAiModelSwitcher
+                    providers={modelProviders}
+                    providerId={modelSelection.providerId}
+                    modelId={modelSelection.modelId}
+                    favorites={["openrouter|gpt-4.1"]}
+                    capabilities={{}}
+                    composerRef={composerRef}
+                    onChange={(providerId, modelId) => setModelSelection({ providerId, modelId })}
+                    onManageModels={() => {
+                      document.documentElement.dataset.modelManage = "true";
+                    }}
+                  />
+                </div>
+                <div className="qx-jan-composer-actions">
+                  <button className="qx-jan-composer-send" type="button" aria-label="Send">
+                    ↑
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
       <section className="qx-ai-message-bubble is-jan is-assistant" data-fixture="single">
         <AgentStepsView steps={singleSteps} />
       </section>

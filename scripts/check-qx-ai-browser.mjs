@@ -12,6 +12,84 @@ try {
   for (const locale of ["en", "zh"]) {
     for (const theme of ["light", "dark"]) {
       await page.goto(`${base}?locale=${locale}&theme=${theme}`);
+      const layout = page.locator('[data-fixture="layout"]');
+      const transcript = layout.locator('[data-qx-ai="conversation-content"]');
+      await expect(transcript).toHaveAttribute("data-following", "true");
+      const alignedColumns = await layout.evaluate((element) => {
+        const messages = element.querySelector(".qx-ai-message-column")?.getBoundingClientRect();
+        const composer = element.querySelector(".qx-jan-composer")?.getBoundingClientRect();
+        if (!messages || !composer) return false;
+        return Math.abs(messages.left - composer.left) <= 1
+          && Math.abs(messages.right - composer.right) <= 1;
+      });
+      assert.equal(alignedColumns, true, "transcript and composer must share one content axis");
+
+      const modelTrigger = layout.locator('[data-qx-ai="model-switcher"]');
+      await expect(modelTrigger).toHaveAttribute("data-model-provider", "openrouter");
+      await expect(modelTrigger).toHaveAttribute("data-model-id", "gpt-4.1");
+      await modelTrigger.click();
+      const modelPopover = page.locator(".qx-ai-model-popover");
+      await expect(modelPopover).toBeVisible();
+      await expect(modelPopover.locator(".qx-ai-model-group-label")).toHaveText([
+        "OpenRouter",
+        "DeepSeek",
+      ]);
+      const modelSearch = modelPopover.locator('input[role="combobox"]');
+      await modelSearch.fill("reasoner");
+      await expect(modelPopover.locator('[role="option"]')).toHaveCount(1);
+      await modelSearch.press("ArrowDown");
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-model-option")),
+        "deepseek::deepseek-reasoner",
+        "ArrowDown must move focus from search to the matching model",
+      );
+      await page.keyboard.press("Enter");
+      await expect(modelPopover).toHaveCount(0);
+      await expect(modelTrigger).toHaveAttribute("data-model-provider", "deepseek");
+      await expect(modelTrigger).toHaveAttribute("data-model-id", "deepseek-reasoner");
+      await expect.poll(() => page.evaluate(
+        () => document.activeElement?.getAttribute("data-fixture"),
+      ), { message: "selecting a model must restore composer focus" }).toBe("composer-input");
+      await modelTrigger.click();
+      await modelPopover.locator(".qx-ai-model-footer button").click();
+      await expect.poll(() => page.evaluate(() => document.documentElement.dataset.modelManage))
+        .toBe("true");
+
+      await transcript.evaluate((element) => {
+        element.scrollTop = 0;
+        element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      const jumpToLatest = layout.locator('[data-qx-ai="scroll-to-latest"]');
+      await expect(jumpToLatest).toBeVisible();
+      const detachedScrollTop = await transcript.evaluate((element) => element.scrollTop);
+      const rowCount = await layout.locator(".qx-ai-message").count();
+      await page.evaluate(() => window.qxAiDisclosureFixture.appendTranscript());
+      await expect(layout.locator(".qx-ai-message")).toHaveCount(rowCount + 1);
+      const detachedAfterAppend = await transcript.evaluate((element) => element.scrollTop);
+      assert.equal(detachedAfterAppend, detachedScrollTop, "live output must not steal detached reading position");
+      await page.evaluate(() => window.qxAiDisclosureFixture.switchTranscriptConversation("b"));
+      await expect(layout).toHaveAttribute("data-conversation", "b");
+      await expect(transcript).toHaveAttribute("data-following", "true");
+      await page.evaluate(() => window.qxAiDisclosureFixture.switchTranscriptConversation("a"));
+      await expect(layout).toHaveAttribute("data-conversation", "a");
+      await expect(transcript).toHaveAttribute("data-following", "false");
+      const restoredDetachedScrollTop = await transcript.evaluate((element) => element.scrollTop);
+      assert.equal(
+        restoredDetachedScrollTop,
+        detachedScrollTop,
+        "each conversation must restore its own detached reading position",
+      );
+      await jumpToLatest.click();
+      await expect(jumpToLatest).toHaveCount(0);
+      await expect.poll(() => transcript.evaluate(
+        (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+      )).toBeLessThanOrEqual(1);
+      await page.evaluate(() => window.qxAiDisclosureFixture.appendTranscript());
+      await expect(layout.locator(".qx-ai-message")).toHaveCount(rowCount + 2);
+      await expect.poll(() => transcript.evaluate(
+        (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+      )).toBeLessThanOrEqual(1);
+
       const single = page.locator('[data-fixture="single"]');
       const reasoning = single.locator('[data-qx-ai="reasoning"] > button');
       await expect(reasoning).toHaveAttribute("aria-expanded", "false");
@@ -78,9 +156,50 @@ try {
       await expect(live.locator("pre.is-output")).toContainText("Live result returned");
     }
   }
+  await page.setViewportSize({ width: 360, height: 720 });
+  await page.goto(`${base}?locale=zh&theme=dark`);
+  const narrowLayout = page.locator('[data-fixture="layout"]');
+  const narrowOverflow = await narrowLayout.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  assert.ok(
+    narrowOverflow.scrollWidth <= narrowOverflow.clientWidth,
+    "narrow transcript must not overflow horizontally",
+  );
+  const narrowColumnsAligned = await narrowLayout.evaluate((element) => {
+    const messages = element.querySelector(".qx-ai-message-column")?.getBoundingClientRect();
+    const composer = element.querySelector(".qx-jan-composer")?.getBoundingClientRect();
+    if (!messages || !composer) return false;
+    return Math.abs(messages.left - composer.left) <= 1
+      && Math.abs(messages.right - composer.right) <= 1;
+  });
+  assert.equal(narrowColumnsAligned, true, "narrow transcript and composer must remain aligned");
+  const narrowModelTrigger = narrowLayout.locator('[data-qx-ai="model-switcher"]');
+  const narrowModelAffordance = await narrowModelTrigger.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const provider = element.querySelector(".qx-ai-model-trigger-provider");
+    const chevron = element.querySelector(".qx-ai-model-trigger-chevron");
+    return {
+      background: style.backgroundColor,
+      radius: Number.parseFloat(style.borderRadius),
+      providerDisplay: provider ? getComputedStyle(provider).display : "missing",
+      chevronDisplay: chevron ? getComputedStyle(chevron).display : "missing",
+    };
+  });
+  assert.notEqual(narrowModelAffordance.background, "rgba(0, 0, 0, 0)");
+  assert.ok(narrowModelAffordance.radius >= 8);
+  assert.equal(narrowModelAffordance.providerDisplay, "none");
+  assert.notEqual(narrowModelAffordance.chevronDisplay, "none");
+  await narrowModelTrigger.click();
+  const narrowModelPopover = page.locator(".qx-ai-model-popover");
+  await expect(narrowModelPopover).toBeVisible();
+  const narrowPopoverBounds = await narrowModelPopover.boundingBox();
+  assert.ok(narrowPopoverBounds && narrowPopoverBounds.x >= 0);
+  assert.ok(narrowPopoverBounds && narrowPopoverBounds.x + narrowPopoverBounds.width <= 360);
   assert.deepEqual(errors, []);
-  await page.screenshot({ path: "/tmp/qx-ai-disclosures-dark-zh.png", fullPage: true });
-  console.log("QxAI browser: real-time split-flap clock, disclosure lifecycle, grouped tools, empty and live results passed");
+  await page.screenshot({ path: "/tmp/qx-ai-model-switcher-dark-zh.png", fullPage: true });
+  console.log("QxAI browser: model picker, transcript follow, split-flap clock, disclosure lifecycle and tool results passed");
 } finally {
   await browser.close();
 }
